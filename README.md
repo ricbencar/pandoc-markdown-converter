@@ -21,6 +21,7 @@ The script supports both a **graphical user interface (GUI)** and a **command-li
 - [Template discovery and selection](#template-discovery-and-selection)
 - [Requirements](#requirements)
 - [Installation](#installation)
+- [Standalone executable build with PyInstaller](#standalone-executable-build-with-pyinstaller)
 - [Quick start](#quick-start)
 - [GUI usage](#gui-usage)
 - [CLI usage](#cli-usage)
@@ -317,10 +318,17 @@ If a selected custom or built-in LaTeX template fails because it depends on miss
 
 ### Python
 
-The script requires Python 3 with the following packages:
+The script requires Python 3 and imports at least these Python packages:
 
 - `pypandoc`
 - `pypdf`
+
+The import is explicit in the script:
+
+```python
+import pypandoc
+from pypdf import PdfReader, PdfWriter
+```
 
 ### External software
 
@@ -340,17 +348,59 @@ For GUI mode, Python must include **Tkinter**.
 
 ## Installation
 
-### 1. Install Python packages
+The recommended setup is to create a dedicated **virtual environment** for this project and install all Python dependencies into that environment.
 
-```bash
-pip install pypandoc pypdf
+### Windows: full setup from scratch
+
+Open **Command Prompt** or **PowerShell** in the project folder and run:
+
+```bat
+cd C:\path\to\your\project
+py -m venv .venv
+.venv\Scripts\activate
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install pypandoc pypdf
 ```
 
-### 2. Install Pandoc
+If you prefer PowerShell and script execution is blocked, you may need:
 
-Install the Pandoc binary and ensure it is available in your system `PATH`.
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
 
-### 3. Install a LaTeX engine
+Then activate again:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+### Linux or macOS: full setup from scratch
+
+```bash
+cd /path/to/your/project
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install pypandoc pypdf
+```
+
+### Why `python -m pip` is recommended
+
+Using:
+
+```bash
+python -m pip install ...
+```
+
+is more robust than calling `pip` directly, because it guarantees that the package is installed into the **currently active interpreter**. This is particularly important when multiple Python installations or multiple virtual environments exist on the same machine.
+
+### Install Pandoc
+
+Install the **Pandoc** binary and ensure it is available in your system `PATH`.
+
+This script does not rely only on the Python wrapper. It also probes the external `pandoc` executable, for example when querying version information and built-in templates. Therefore, installing `pypandoc` alone is **not sufficient**; the actual `pandoc` program must also be available.
+
+### Install a LaTeX engine
 
 Install at least one of the following and ensure it is available in `PATH`:
 
@@ -358,9 +408,33 @@ Install at least one of the following and ensure it is available in `PATH`:
 - `lualatex`
 - `pdflatex`
 
-### 4. Confirm the tools are available
+The script automatically selects the first available engine in this order:
 
-Typical checks:
+1. `xelatex`
+2. `lualatex`
+3. `pdflatex`
+
+### Confirm the environment is correct
+
+After activation and package installation, confirm that the project is using the correct Python and pip:
+
+```bat
+where python
+where pip
+python -V
+python -m pip -V
+```
+
+On Linux or macOS:
+
+```bash
+which python
+which pip
+python -V
+python -m pip -V
+```
+
+Also confirm that the external tools are visible:
 
 ```bash
 pandoc --version
@@ -368,6 +442,104 @@ xelatex --version
 ```
 
 If `xelatex` is not installed, the script will try `lualatex`, then `pdflatex`.
+
+### First runtime test
+
+Before attempting an executable build, run the script once from the activated virtual environment:
+
+```bash
+python script.py
+```
+
+or:
+
+```bash
+python script.py README.md
+```
+
+If the script starts correctly here, the Python-side dependencies are in place and you can proceed to executable packaging.
+
+---
+
+## Standalone executable build with PyInstaller
+
+This project is a single-script application, so **PyInstaller** is the most direct way to produce a standalone executable.
+
+### Important note on the tool name
+
+The packaging tool is **PyInstaller**. If you wrote or meant “pycompiler”, use **PyInstaller** in the actual commands.
+
+### Install PyInstaller into the same virtual environment
+
+With the virtual environment activated:
+
+```bash
+python -m pip install pyinstaller
+```
+
+### Build a single-file Windows executable
+
+For the GUI application form, use:
+
+```bat
+python -m PyInstaller --clean --onefile --windowed --name PandocMarkdownConverter script.py
+```
+
+This produces a single executable in:
+
+```text
+dist\PandocMarkdownConverter.exe
+```
+
+### Build a console executable instead
+
+If you want a terminal window to remain visible for debugging, omit `--windowed`:
+
+```bat
+python -m PyInstaller --clean --onefile --name PandocMarkdownConverter script.py
+```
+
+### Recommended clean build sequence on Windows
+
+```bat
+cd C:\path\to\your\project
+rmdir /s /q build
+rmdir /s /q dist
+del /q PandocMarkdownConverter.spec
+py -m venv .venv
+.venv\Scripts\activate
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install pypandoc pypdf pyinstaller
+python script.py --list-templates
+python -m PyInstaller --clean --onefile --windowed --name PandocMarkdownConverter script.py
+```
+
+### Files and folders created by PyInstaller
+
+After a build, you will typically see:
+
+```text
+build/
+dist/
+PandocMarkdownConverter.spec
+```
+
+The file you distribute is the executable inside `dist/`.
+
+### Important packaging note for this project
+
+PyInstaller bundles the Python interpreter and imported Python modules, but it does **not** automatically replace external system tools that your script expects at runtime.
+
+This script still requires the following to be available on the target machine unless you redesign the program to bundle or locate them differently:
+
+- `pandoc`
+- at least one LaTeX engine such as `xelatex`, `lualatex`, or `pdflatex`
+
+So the executable is “standalone” with respect to Python, but the full conversion workflow still depends on those external document-conversion tools.
+
+### When to recreate the virtual environment
+
+If the project folder, parent folder, or `.venv` folder has been moved or renamed, recreate the virtual environment instead of trying to reuse it. Virtual environments are not reliably portable after path changes.
 
 ---
 
@@ -790,6 +962,77 @@ Action:
 - use the default template
 - install the missing LaTeX package(s)
 - simplify the chosen custom template
+
+### `ModuleNotFoundError: No module named 'pypandoc'`
+
+Symptom:
+
+```text
+Traceback (most recent call last):
+  File "script.py", line 151, in <module>
+    import pypandoc
+ModuleNotFoundError: No module named 'pypandoc'
+```
+
+Meaning:
+
+- the active Python interpreter does not have `pypandoc` installed
+- or the terminal is using the wrong Python interpreter
+- or the virtual environment was not activated correctly
+
+Action:
+
+1. Activate the correct virtual environment.
+2. Install the package through that interpreter:
+
+```bash
+python -m pip install pypandoc pypdf
+```
+
+3. Confirm installation:
+
+```bash
+python -m pip show pypandoc
+python -c "import pypandoc; print('pypandoc OK')"
+```
+
+### `pip` launcher points to the wrong virtual environment
+
+Symptom on Windows:
+
+```text
+Fatal error in launcher: Unable to create process ...
+```
+
+Typical cause:
+
+- the `.venv` folder was copied, moved, or the parent project directory was renamed
+- `pip.exe` still points to an older Python path
+
+Action:
+
+Delete and recreate the virtual environment:
+
+```bat
+rmdir /s /q .venv
+py -m venv .venv
+.venv\Scripts\activate
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install pypandoc pypdf pyinstaller
+```
+
+### PyInstaller build succeeds but conversion fails on another machine
+
+Possible cause:
+
+- Python was bundled correctly
+- but `pandoc` and/or the LaTeX engine are missing on the target machine
+
+Action:
+
+- install **Pandoc**
+- install **MiKTeX**, **TeX Live**, or another LaTeX distribution providing `xelatex`, `lualatex`, or `pdflatex`
+- confirm the tools are in `PATH`
 
 ### Formulas render poorly in DOCX
 
